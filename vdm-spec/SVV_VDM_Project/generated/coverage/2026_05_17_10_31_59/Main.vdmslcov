@@ -1,0 +1,14 @@
+module Main
+exports all
+definitions
+
+values
+  testVoter : token = mk_token("V1");
+  testCand  : token = mk_token("C1");
+
+functions
+
+main : () -> bool
+main() == true;
+
+end Main

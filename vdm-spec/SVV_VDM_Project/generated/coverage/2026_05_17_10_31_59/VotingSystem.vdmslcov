@@ -1,0 +1,136 @@
+module VotingSystem
+exports all
+definitions
+
+types
+  VoterId     = token;
+  CandidateId = token;
+  BallotId    = token;
+
+  ElectionState = <SETUP> | <OPEN> | <CLOSED> | <TALLIED>;
+
+  Voter ::
+    vid      : VoterId
+    hasVoted : bool;
+
+  Ballot ::
+    bid         : BallotId
+    candidateId : CandidateId;
+
+  Tally = map CandidateId to nat;
+
+state VotingSystemState of
+  electionState : ElectionState
+  voters        : map VoterId to Voter
+  candidates    : set of CandidateId
+  ballots       : map BallotId to Ballot
+  tally         : Tally
+
+inv mk_VotingSystemState(es, vs, cs, bs, t) ==
+  (forall vid in set dom vs & vs(vid).vid = vid)
+  and
+  (forall bid in set dom bs & bs(bid).candidateId in set cs)
+  and
+  (es = <TALLIED> => dom t = cs)
+  and
+  (es = <TALLIED> =>
+    card dom bs =
+    card { vid | vid in set dom vs & vs(vid).hasVoted })
+
+init s ==
+  s = mk_VotingSystemState(
+    <SETUP>,
+    { |-> },
+    {},
+    { |-> },
+    { |-> }
+  )
+end
+
+operations
+
+RegisterVoter(vid : VoterId)
+ext wr voters        : map VoterId to Voter
+    rd electionState : ElectionState
+pre
+  electionState = <SETUP>
+  and vid not in set dom voters
+post
+  voters = voters~ munion { vid |-> mk_Voter(vid, false) };
+
+RegisterCandidate(cid : CandidateId)
+ext wr candidates    : set of CandidateId
+    rd electionState : ElectionState
+pre
+  electionState = <SETUP>
+  and cid not in set candidates
+post
+  candidates = candidates~ union { cid };
+
+OpenElection()
+ext wr electionState : ElectionState
+    rd voters        : map VoterId to Voter
+    rd candidates    : set of CandidateId
+pre
+  electionState = <SETUP>
+  and card dom voters > 0
+  and card candidates > 0
+post
+  electionState = <OPEN>;
+
+CastVote(vid : VoterId, cid : CandidateId, bid : BallotId)
+ext wr voters        : map VoterId to Voter
+    wr ballots       : map BallotId to Ballot
+    rd electionState : ElectionState
+    rd candidates    : set of CandidateId
+pre
+  electionState = <OPEN>
+  and vid in set dom voters
+  and voters(vid).hasVoted = false
+  and cid in set candidates
+  and bid not in set dom ballots
+post
+  ballots = ballots~ munion { bid |-> mk_Ballot(bid, cid) }
+  and
+  voters = voters~ munion { vid |-> mk_Voter(vid, true) };
+
+CloseElection()
+ext wr electionState : ElectionState
+pre
+  electionState = <OPEN>
+post
+  electionState = <CLOSED>;
+
+ComputeTally()
+ext wr electionState : ElectionState
+    wr tally         : Tally
+    rd ballots       : map BallotId to Ballot
+    rd candidates    : set of CandidateId
+pre
+  electionState = <CLOSED>
+post
+  electionState = <TALLIED>
+  and
+  tally = { cid |->
+    card { bid | bid in set dom ballots
+               & ballots(bid).candidateId = cid }
+    | cid in set candidates };
+
+GetVoteCount(cid : CandidateId) res : nat
+ext rd tally         : Tally
+    rd electionState : ElectionState
+pre
+  electionState = <TALLIED>
+  and cid in set dom tally
+post
+  res = tally(cid);
+
+functions
+
+CountVoted : map VoterId to Voter -> nat
+CountVoted(vs) ==
+  card { vid | vid in set dom vs & vs(vid).hasVoted }
+pre true
+post RESULT <= card dom vs;
+
+end VotingSystem
